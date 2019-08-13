@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/neo4j/neo4j-go-driver/neo4j"
 	"math"
+	"os"
 	"runtime"
 )
 
@@ -12,9 +14,30 @@ type Neo4jType struct {
 	Count int64
 }
 
+type Configuration struct {
+	Source      neoSource `json:"source"`
+	Destination neoSource `json:"destination"`
+}
+
+type neoSource struct {
+	Uri      string `json:"uri"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 func main() {
 	var workers = runtime.NumCPU() / 2
 	runtime.GOMAXPROCS(workers)
+
+	file, _ := os.Open("config.json")
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	config := Configuration{}
+	err := decoder.Decode(&config)
+	if err != nil {
+		fmt.Println("error:", err)
+	}
 
 	var sourceSession neo4j.Session
 	var destinationSession neo4j.Session
@@ -22,10 +45,14 @@ func main() {
 	var sourceNodes interface{}
 	var sourceRelationships interface{}
 
-	sourceSession = prepareNeo4jConnection("bolt://localhost:7687", "", "")
+	sourceSession = prepareNeo4jConnection(config.Source.Uri, config.Source.Username, config.Source.Password)
 	defer sourceSession.Close()
 
-	destinationSession = prepareNeo4jConnection("bolt://localhost:27687", "neo4j", "testpass")
+	destinationSession = prepareNeo4jConnection(
+		config.Destination.Uri,
+		config.Destination.Username,
+		config.Destination.Password)
+
 	defer destinationSession.Close()
 
 	sourceNodes, _ = sourceSession.ReadTransaction(readLabels)
@@ -44,11 +71,13 @@ func main() {
 		}
 	}()
 
+	// 1. Sync only labeled nodes
 	for _, node := range sourceNodes.([]Neo4jType) {
 		readLabelNodes(sourceSession, node, records)
 	}
 	close(records)
 
+	// 2. Sync all relationships
 	for _, rel := range sourceRelationships.([]Neo4jType) {
 		fmt.Printf("%s \n", rel)
 		readRelationships(sourceSession, rel, relations)
