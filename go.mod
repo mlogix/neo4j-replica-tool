@@ -1,4 +1,4 @@
-module Neo4JReplicator
+module neo4j-replica-tool
 
 go 1.12
 
