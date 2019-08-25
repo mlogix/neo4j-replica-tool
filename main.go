@@ -159,6 +159,10 @@ func performRecord(session neo4j.Session, record neo4j.Node) error {
 	var result neo4j.Result
 	var err error
 
+	if record == nil {
+		return nil
+	}
+
 	id := record.Id()
 	label := record.Labels()[0]
 	props := record.Props()
